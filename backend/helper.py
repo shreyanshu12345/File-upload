@@ -57,27 +57,3 @@ class R2Functions:
 
 
 
-# S3Connect = boto3.client(
-#     's3',
-#     endpoint_url=R2_ENDPOINT,
-#     aws_access_key_id=R2_ACCESS_KEY_ID,
-#     aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-#     region_name="auto",  # ✅ FIX
-#     config=Config(signature_version='s3v4'),
-# )
-
-# def upload_file(file_name, bucket_name, object_name=None):
-#     if object_name is None:
-#         object_name = "files/" + file_name
- 
-#     try:
-#         S3Connect.upload_file(file_name, bucket_name, object_name)
-#     except ClientError as e:
-#         print(f"An error occurred: {e}")
-#         return False
-#     return True
-
-# if upload_file("dummy.txt", R2_BUCKET):
-#     print(f"File  uploaded successfully to ")
-# else:
-#     print(f"File upload failed")
