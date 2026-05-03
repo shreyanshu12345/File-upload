@@ -1,0 +1,12 @@
+/* Global reset — all uploader-specific styles live in src/styles/uploader.css */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
