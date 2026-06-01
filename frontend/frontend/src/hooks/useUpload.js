@@ -74,17 +74,17 @@ export function useUpload() {
       const startRes = await fetch(`${BASE_URL}/start-upload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name }),
+        body: JSON.stringify({ filename: file.name, fileSize: file.size }),
       });
       const startData = await startRes.json();
       if (!startRes.ok) throw new Error(startData.error || "start-upload failed");
 
-      const { uploadId, key, filename: uniqueName } = startData;
+      const { uploadId, key, filename: uniqueName, presignedUrls } = startData;
       setUniqueFilename(uniqueName);
       addLog(`UPLOAD ID — ${uploadId.slice(0, 16)}…`);
       addLog(`R2 NAME   — ${uniqueName}`);
 
-      // ── 2. Upload parts sequentially ────────────────────────────────
+      // ── 2. Upload parts directly to R2 via presigned URLs ───────────
       const parts = [];
 
       for (let i = 0; i < chunks; i++) {
@@ -101,22 +101,16 @@ export function useUpload() {
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
 
-        const formData = new FormData();
-        formData.append("uploadId", uploadId);
-        formData.append("key", key);
-        formData.append("partNumber", String(partNumber));
-        formData.append("chunk", new Blob([chunk]));
-
-        const partRes = await fetch(`${BASE_URL}/upload-part`, {
-          method: "POST",
-          body: formData,
+        const partRes = await fetch(presignedUrls[i].url, {
+          method: "PUT",
+          body: chunk,
         });
-        const partData = await partRes.json();
-        if (!partRes.ok)
-          throw new Error(partData.error || `Part ${partNumber} failed`);
 
-        const { ETag } = partData;
-        parts.push({ PartNumber: partNumber, ETag });
+        if (!partRes.ok)
+          throw new Error(`Part ${partNumber} upload failed (${partRes.status})`);
+
+        const etag = (partRes.headers.get("ETag") || "").replace(/"/g, "");
+        parts.push({ PartNumber: partNumber, ETag: etag });
 
         setChunkStatus((prev) => {
           const next = [...prev];
@@ -126,7 +120,7 @@ export function useUpload() {
         setUploadedChunks(i + 1);
         setProgress(Math.round(((i + 1) / chunks) * 100));
         addLog(
-          `PART ${String(partNumber).padStart(3, "0")} — OK  etag:${ETag.slice(0, 8)}…`
+          `PART ${String(partNumber).padStart(3, "0")} — OK  etag:${etag.slice(0, 8)}…`
         );
       }
 

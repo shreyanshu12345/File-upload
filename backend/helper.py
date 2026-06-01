@@ -35,8 +35,8 @@ class R2Functions:
         try:
             id = self.R2_connect.create_multipart_upload(Bucket=R2_BUCKET, Key=key)['UploadId']
             return id
-        except:
-            print('couldnt create a session')
+        except Exception as e:
+            print(f'couldnt create a session: {e}')
 
     def generate_presigned_part_url(self, key, upload_id, part_number):
         try:

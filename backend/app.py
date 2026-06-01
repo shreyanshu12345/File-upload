@@ -3,25 +3,25 @@ import os
 import uuid
 import secrets
 import string
+import math
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import helper
 from flask_cors import CORS
 from pymongo import MongoClient
 
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 CORS(app)
 
 obj = helper.R2Functions()
 R2_BUCKET = os.getenv('R2_BUCKET')
+CHUNK_SIZE = 5 * 1024 * 1024  # must match frontend constant
 
 # ── MongoDB ───────────────────────────────────────────────────────────────────
-# NOTE: replace <PASSWORD> below with the correct Atlas password if auth fails
-MONGO_URI = os.getenv(
-    "MONGO_URI",
-)
+MONGO_URI = os.getenv("MONGO_URI")
+print(f"[startup] MONGO_URI = {MONGO_URI[:30]}..." if MONGO_URI else "[startup] MONGO_URI is NOT SET — will use localhost:27017")
 mongo_client = MongoClient(MONGO_URI)
 db           = mongo_client["uploadedfile"]
 mappings     = db["mappings"]
@@ -79,46 +79,25 @@ def create_session():
         if not upload_id:
             return jsonify({"error": "Failed to create upload session"}), 500
 
-        return jsonify({"uploadId": upload_id, "key": key, "filename": unique_filename})
+        total_parts = math.ceil(file_size / CHUNK_SIZE) if file_size > 0 else 1
+        presigned_urls = []
+        for part_number in range(1, total_parts + 1):
+            url = obj.generate_presigned_part_url(key, upload_id, part_number)
+            if not url:
+                return jsonify({"error": f"Failed to generate presigned URL for part {part_number}"}), 500
+            presigned_urls.append({"partNumber": part_number, "url": url})
+
+        return jsonify({
+            "uploadId": upload_id,
+            "key": key,
+            "filename": unique_filename,
+            "presignedUrls": presigned_urls,
+        })
 
     except Exception as e:
         print(f"[start-upload] error: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-@app.route("/upload-part", methods=["POST"])
-def upload_part():
-    try:
-        upload_id   = request.form.get("uploadId")
-        key         = request.form.get("key")
-        part_number = request.form.get("partNumber")
-
-        if not all([upload_id, key, part_number]):
-            return jsonify({"error": "uploadId, key, partNumber are required"}), 400
-
-        part_number = int(part_number)
-        chunk = request.files.get("chunk")
-        if not chunk:
-            return jsonify({"error": "chunk file is required"}), 400
-
-        chunk_data = chunk.read()
-        if len(chunk_data) == 0:
-            return jsonify({"error": "chunk is empty"}), 400
-
-        response = obj.R2_connect.upload_part(
-            Bucket=R2_BUCKET,
-            Key=key,
-            UploadId=upload_id,
-            PartNumber=part_number,
-            Body=chunk_data
-        )
-
-        etag = response.get("ETag", "").replace('"', "")
-        return jsonify({"ETag": etag, "PartNumber": part_number})
-
-    except Exception as e:
-        print(f"[upload-part] error: {e}")
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/complete-upload", methods=["POST"])

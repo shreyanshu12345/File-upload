@@ -92,7 +92,7 @@ export default function FileUploader() {
       const startData = await startRes.json();
       if (!startRes.ok) throw new Error(startData.error || "start-upload failed");
 
-      const { uploadId, key } = startData;
+      const { uploadId, key, presignedUrls } = startData;
       addLog(`UPLOAD ID — ${uploadId.slice(0, 16)}…`);
 
       const parts = [];
@@ -106,26 +106,20 @@ export default function FileUploader() {
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
 
-        const formData = new FormData();
-        formData.append("uploadId", uploadId);
-        formData.append("key", key);
-        formData.append("partNumber", String(partNumber));
-        formData.append("chunk", new Blob([chunk]));
-
-        const partRes = await fetch(`${BASE}/upload-part`, {
-          method: "POST",
-          body: formData,
+        const partRes = await fetch(presignedUrls[i].url, {
+          method: "PUT",
+          body: chunk,
         });
-        const partData = await partRes.json();
-        if (!partRes.ok) throw new Error(partData.error || `Part ${partNumber} failed`);
 
-        const { ETag } = partData;
-        parts.push({ PartNumber: partNumber, ETag });
+        if (!partRes.ok) throw new Error(`Part ${partNumber} upload failed (${partRes.status})`);
+
+        const etag = (partRes.headers.get("ETag") || "").replace(/"/g, "");
+        parts.push({ PartNumber: partNumber, ETag: etag });
 
         setChunkStatus((prev) => { const n = [...prev]; n[i] = "done"; return n; });
         setUploadedChunks(i + 1);
         setProgress(Math.round(((i + 1) / chunks) * 100));
-        addLog(`PART ${String(partNumber).padStart(3, "0")} — OK  etag:${ETag.slice(0, 8)}…`);
+        addLog(`PART ${String(partNumber).padStart(3, "0")} — OK  etag:${etag.slice(0, 8)}…`);
       }
 
       addLog("POST /complete-upload ...");
