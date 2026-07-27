@@ -2,11 +2,7 @@ import { useState, useCallback } from "react";
 import { CHUNK_SIZE, BASE_URL } from "../constants/upload";
 import { fmtBytes } from "../utils/format";
 
-/**
- * Manages all state and logic for the multipart S3 file upload flow.
- * After a successful upload the backend returns a short code (e.g. "A3X9KZ")
- * which the user can share. The code → R2 key mapping is stored in MongoDB.
- */
+
 export function useUpload() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
